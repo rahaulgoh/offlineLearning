@@ -1,0 +1,30 @@
+{
+  "sensor_type": "vibration",
+  "table": "derived_vibration_record",
+  "tag_col": "tag_id",
+  "value_col": "value",
+  "time_col": "created_on",
+  "window_size": 60,
+  "stride": 1,
+  "zscore_clip": 8.0,
+  "threshold_percentile": 99.0,
+  "trained_at_utc": "2026-01-19T04:09:01.394846+00:00",
+  "training_windows": 19882,
+  "mean_recon_error": 0.5210363864898682,
+  "per_tag": {
+    "0C61CFC147B4": {
+      "mean": 0.9778969883918762,
+      "std": 0.13636939227581024,
+      "threshold": 6.494264602661133,
+      "rows_used": 10000,
+      "windows_used": 9941
+    },
+    "F88A5EB8CF04": {
+      "mean": 0.9805039167404175,
+      "std": 0.14687480032444,
+      "threshold": 1.3733826875686646,
+      "rows_used": 10000,
+      "windows_used": 9941
+    }
+  }
+}

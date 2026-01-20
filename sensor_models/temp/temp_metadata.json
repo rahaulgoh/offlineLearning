@@ -1,0 +1,37 @@
+{
+  "sensor_type": "temperature",
+  "table": "raw_temp_record",
+  "tag_col": "tag_id",
+  "value_col": "value",
+  "time_col": "created_on",
+  "window_size": 60,
+  "stride": 1,
+  "zscore_clip": 8.0,
+  "threshold_percentile": 99.0,
+  "trained_at_utc": "2026-01-19T04:08:47.211479+00:00",
+  "training_windows": 29691,
+  "mean_recon_error": 0.03676416724920273,
+  "per_tag": {
+    "0C61CFC149B5": {
+      "mean": 24.932910919189453,
+      "std": 0.49174442887306213,
+      "threshold": 1.0539432764053345,
+      "rows_used": 9928,
+      "windows_used": 9869
+    },
+    "F036EB6CB46C": {
+      "mean": 27.462894439697266,
+      "std": 1.0268757343292236,
+      "threshold": 0.2036389261484146,
+      "rows_used": 9960,
+      "windows_used": 9901
+    },
+    "F6E3DF68422F": {
+      "mean": 26.35806655883789,
+      "std": 0.5561637878417969,
+      "threshold": 2.5051753520965576,
+      "rows_used": 9980,
+      "windows_used": 9921
+    }
+  }
+}

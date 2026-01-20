@@ -1,0 +1,66 @@
+{
+  "sensor_type": "vibration_health",
+  "table": "raw_vibration_record",
+  "tag_col": "tag_id",
+  "x_col": "x_value",
+  "y_col": "y_value",
+  "z_col": "z_value",
+  "time_col": "created_on",
+  "order_col": "idx",
+  "window_size": 200,
+  "stride": 50,
+  "trained_at_utc": "2026-01-19T04:08:20.077110+00:00",
+  "tags_used": [
+    "0C61CFC147B4",
+    "F88A5EB8CF04"
+  ],
+  "feature_names": [
+    "corr_xy",
+    "corr_xz",
+    "corr_yz",
+    "m_crest",
+    "m_kurt",
+    "m_maxabs",
+    "m_mean",
+    "m_ptp",
+    "m_rms",
+    "m_slope",
+    "m_std",
+    "x_crest",
+    "x_kurt",
+    "x_maxabs",
+    "x_mean",
+    "x_ptp",
+    "x_rms",
+    "x_std",
+    "y_crest",
+    "y_kurt",
+    "y_maxabs",
+    "y_mean",
+    "y_ptp",
+    "y_rms",
+    "y_std",
+    "z_crest",
+    "z_kurt",
+    "z_maxabs",
+    "z_mean",
+    "z_ptp",
+    "z_rms",
+    "z_std"
+  ],
+  "health_mapper": {
+    "xq": [
+      0.3642685368332276,
+      0.5423348357120049,
+      0.6073046900453067,
+      0.6907439087944677
+    ],
+    "yq": [
+      0.0,
+      50.0,
+      70.0,
+      100.0
+    ]
+  },
+  "note": "raw_score = -IsolationForest.score_samples(scaled_features)"
+}

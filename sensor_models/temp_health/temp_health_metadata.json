@@ -1,0 +1,45 @@
+{
+  "sensor_type": "temperature_health",
+  "source_table": "raw_temp_record",
+  "tag_col": "tag_id",
+  "value_col": "value",
+  "time_col": "created_on",
+  "order_col": "idx",
+  "window_size": 120,
+  "stride": 10,
+  "feature_names": [
+    "mean",
+    "std",
+    "min",
+    "max",
+    "peak_to_peak",
+    "mean_abs_delta",
+    "slope_per_sample",
+    "resid_std",
+    "energy_centered"
+  ],
+  "trained_at_utc": "2026-01-19T04:08:10.823115+00:00",
+  "tags_used": 3,
+  "training_windows": 5945,
+  "health_score_mapping": {
+    "raw_score_percentile_lo": 0.5,
+    "raw_score_percentile_hi": 99.5,
+    "raw_score_lo": -0.7824500203132629,
+    "raw_score_hi": -0.33352452516555786,
+    "note": "IsolationForest score_samples: higher=more normal. Health score maps lower raw_score -> higher health."
+  },
+  "per_tag_baseline": {
+    "0C61CFC149B5": {
+      "mean": 24.92137908935547,
+      "std": 0.45813748240470886
+    },
+    "F036EB6CB46C": {
+      "mean": 27.33344268798828,
+      "std": 1.0382558107376099
+    },
+    "F6E3DF68422F": {
+      "mean": 26.057348251342773,
+      "std": 0.7198240756988525
+    }
+  }
+}
