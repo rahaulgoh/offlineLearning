@@ -60,7 +60,7 @@ class YoloViewer(QWidget):
         # timer loop
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
-        self.timer.start(15)
+        self.timer.start(33)
 
         self._log("UI started.")
 
