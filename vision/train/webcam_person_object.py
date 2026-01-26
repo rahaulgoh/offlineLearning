@@ -73,18 +73,16 @@ class YoloViewer(QWidget):
         if not ok:
             self._log("Camera read failed.")
             return
-        
-        # Mirror camera
+
         frame = cv2.flip(frame, 1)
 
-        # Inference
+        # Inference (consider bumping imgsz to 960 if CPU allows)
         results = self.model(frame, imgsz=640, conf=CONF_TH, verbose=False)[0]
 
-        person_present = False
-        person_count = 0
         color = (0, 255, 0)
+        person_count = 0
 
-        # Draw boxes + decide person is present
+        # Draw boxes + count persons
         for b in results.boxes:
             cls_id = int(b.cls[0])
             conf = float(b.conf[0])
@@ -95,37 +93,52 @@ class YoloViewer(QWidget):
             label = f"{name.capitalize()} {conf:.2f}"
             if name == "person":
                 person_count += 1
-                self.count_history.append(person_count)
-
-                sorted_counts = sorted(self.count_history)
-                stable_count = sorted_counts[len(sorted_counts)//2]
 
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(frame, label, (x1, max(20, y1-10)),
+            cv2.putText(frame, label, (x1, max(20, y1 - 10)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-            
-            person_present = person_count > 0
-            now = time.time()
 
-            # Frame change logging
-            if (
-                person_present != self.last_person_state or 
-                person_count != getattr(self, "last_person_count", -1)
-            ) and (now - self.last_log_time) > 0.5:
-                self._log(f"People detected: {stable_count}")
-                self.last_person_state = person_present
-                self.last_person_count = person_count
-                self.last_log_time = now
+        # ✅ Append FINAL count once per frame
+        self.count_history.append(person_count)
 
-            # Convert frame (BGR -> RGB)
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            h, w, ch = rgb.shape
-            bytes_per_line = ch * w
-            qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        # ✅ Compute stable count from history
+        sorted_counts = sorted(self.count_history)
+        stable_count = sorted_counts[len(sorted_counts) // 2] if sorted_counts else 0
 
-            self.video_label.setPixmap(QPixmap.fromImage(qimg).scaled(
-                self.video_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        person_present = stable_count > 0
+        now = time.time()
+
+        # Log when stable count changes (rate-limited)
+        last_stable = getattr(self, "last_stable_count", None)
+        if last_stable is None:
+            self.last_stable_count = stable_count
+
+        if stable_count != self.last_stable_count and (now - self.last_log_time) > 0.5:
+            self._log(f"People detected (stable): {stable_count}")
+            self.last_stable_count = stable_count
+            self.last_log_time = now
+
+        # Optional banner
+        if person_present:
+            cv2.putText(frame, f"People in frame: {stable_count}",
+                        (20, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.1,
+                        (0, 255, 0), 3)
+
+        # ✅ Update UI ONCE per frame
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb.shape
+        bytes_per_line = ch * w
+        qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
+
+        self.video_label.setPixmap(
+            QPixmap.fromImage(qimg).scaled(
+                self.video_label.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
             )
+        )
+
 
     def closeEvent(self, event):
         self.timer.stop()
