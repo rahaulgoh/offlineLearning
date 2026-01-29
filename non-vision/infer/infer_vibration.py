@@ -81,7 +81,7 @@ def load_state(sensor_type: str, tags: List[str]) -> Dict[str, int]:
         SELECT tag_id, last_idx
         FROM {STATE_TABLE}
         WHERE sensor_type = %s
-          AND tag_id = ANY(%s);
+        AND tag_id = ANY(%s);
     """
     with db_connect() as conn:
         with conn.cursor() as cur:
@@ -114,7 +114,7 @@ def insert_scores(rows: List[Tuple]) -> None:
     q = f"""
         INSERT INTO {SCORE_TABLE}
         (sensor_type, tag_id, window_end_idx, window_end_time,
-         score, threshold, is_anomaly, model_name)
+        score, threshold, is_anomaly, model_name)
         VALUES %s
         ON CONFLICT DO NOTHING;
     """
@@ -136,10 +136,10 @@ def fetch_rows_since(tag_id: str, last_idx: int, limit: int):
         SELECT {IDX_COL}, {VAL_COL}, {TIME_COL}
         FROM {SOURCE_TABLE}
         WHERE {TAG_COL} = %s
-          AND {IDX_COL} > %s
-          AND {VAL_COL} = {VAL_COL}
-          AND {VAL_COL} <> 'Infinity'::float8
-          AND {VAL_COL} <> '-Infinity'::float8
+        AND {IDX_COL} > %s
+        AND {VAL_COL} = {VAL_COL}
+        AND {VAL_COL} <> 'Infinity'::float8
+        AND {VAL_COL} <> '-Infinity'::float8
         ORDER BY {IDX_COL} ASC
         LIMIT %s;
     """

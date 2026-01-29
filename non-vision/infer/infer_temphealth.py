@@ -1,25 +1,4 @@
 #! /usr/bin/env python3
-"""
-Temperature Health Inference (feature-based, unsupervised)
-
-Reads:
-  raw_temp_record(tag_id, idx, value, created_on)
-
-Writes:
-  edge_infer_state(sensor_type='temperature_health', tag_id, last_idx, updated_on)
-  edge_temp_health_score(sensor_type, tag_id, window_end_idx, window_end_time,
-                         raw_score, health_score, health_threshold, is_unhealthy,
-                         model_name, created_on)
-
-Assumptions:
-- raw_temp_record.idx is BIGINT and monotonic (autoincrement)
-- Model artifact is a joblib dict: {"scaler": StandardScaler, "model": IsolationForest}
-- temp_health_metadata.json contains:
-    - per_tag_baseline[tag_id] = {mean, std}
-    - health_score_mapping raw_score_lo/raw_score_hi (percentile bounds)
-    - window_size, stride, feature_names, etc.
-"""
-
 import json
 import os
 import time
@@ -160,10 +139,10 @@ def fetch_rows_since(tag_id: str, last_idx: int, limit: int):
         SELECT {IDX_COL}, {VAL_COL}, {TIME_COL}
         FROM {SOURCE_TABLE}
         WHERE {TAG_COL} = %s
-          AND {IDX_COL} > %s
-          AND {VAL_COL} = {VAL_COL}
-          AND {VAL_COL} <> 'Infinity'::float8
-          AND {VAL_COL} <> '-Infinity'::float8
+        AND {IDX_COL} > %s
+        AND {VAL_COL} = {VAL_COL}
+        AND {VAL_COL} <> 'Infinity'::float8
+        AND {VAL_COL} <> '-Infinity'::float8
         ORDER BY {IDX_COL} ASC
         LIMIT %s;
     """
@@ -234,13 +213,6 @@ def normalize_features_per_tag(F: np.ndarray, baseline: TagBaseline) -> np.ndarr
 # SCORE -> HEALTH MAPPING
 # ----------------------------
 def raw_to_health(raw_score: float, lo: float, hi: float) -> float:
-    """
-    IsolationForest.score_samples: higher = more normal.
-    Health score: 0..100 where higher = worse.
-
-    Map raw_score in [lo, hi] to [100, 0] linearly (inverted),
-    clamp outside.
-    """
     if hi <= lo:
         # fallback: if mapping is broken, treat everything as "neutral"
         return 50.0

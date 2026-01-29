@@ -1,29 +1,4 @@
 #! /usr/bin/env python3
-"""
-vibration_health Inference (time-windowed, resampled, unsupervised)
-
-Reads:
-  raw_vibration_record(tag_id, idx, x_value, y_value, z_value, created_on)
-
-Writes:
-  edge_infer_state(sensor_type='vibration_health', tag_id, last_idx, updated_on)
-  edge_vibration_health_score(sensor_type, tag_id, window_end_idx, window_end_time,
-                             raw_score, health_score, health_threshold, is_unhealthy,
-                             model_name, created_on)
-
-Key changes vs old version:
-- Windowing is TIME-based (WINDOW_SECONDS), not row-count based.
-- Startup backfill uses BACKFILL_MINUTES (by created_on), not BACKFILL_ROWS.
-- Model input still fixed-length: we RESAMPLE each time window into exactly window_size
-  samples (window_size comes from metadata), so your trained model stays valid.
-
-Assumptions:
-- metadata.window_size exists (as before).
-- metadata.feature_names ordering exists (as before).
-- metadata.health_mapper {xq,yq} exists (as before).
-- metadata.tags_used exists (as before).
-"""
-
 import json
 import os
 import time
@@ -110,7 +85,7 @@ def load_state(sensor_type: str, tags: List[str]) -> Dict[str, int]:
         SELECT tag_id, last_idx
         FROM {STATE_TABLE}
         WHERE sensor_type = %s
-          AND tag_id = ANY(%s);
+        AND tag_id = ANY(%s);
     """
     with db_connect() as conn:
         with conn.cursor() as cur:
@@ -143,7 +118,7 @@ def insert_scores(rows: List[Tuple]) -> None:
     q = f"""
         INSERT INTO {SCORE_TABLE}
         (sensor_type, tag_id, window_end_idx, window_end_time,
-         raw_score, health_score, health_threshold, is_unhealthy, model_name)
+        raw_score, health_score, health_threshold, is_unhealthy, model_name)
         VALUES %s
         ON CONFLICT (sensor_type, tag_id, window_end_idx) DO NOTHING;
     """
@@ -158,11 +133,11 @@ def fetch_rows_since_idx(tag_id: str, last_idx: int, limit: int):
         SELECT {IDX_COL}, {X_COL}, {Y_COL}, {Z_COL}, {TIME_COL}
         FROM {SOURCE_TABLE}
         WHERE {TAG_COL} = %s
-          AND {IDX_COL} > %s
-          AND {X_COL} = {X_COL} AND {Y_COL} = {Y_COL} AND {Z_COL} = {Z_COL}
-          AND {X_COL} <> 'Infinity'::float8 AND {X_COL} <> '-Infinity'::float8
-          AND {Y_COL} <> 'Infinity'::float8 AND {Y_COL} <> '-Infinity'::float8
-          AND {Z_COL} <> 'Infinity'::float8 AND {Z_COL} <> '-Infinity'::float8
+        AND {IDX_COL} > %s
+        AND {X_COL} = {X_COL} AND {Y_COL} = {Y_COL} AND {Z_COL} = {Z_COL}
+        AND {X_COL} <> 'Infinity'::float8 AND {X_COL} <> '-Infinity'::float8
+        AND {Y_COL} <> 'Infinity'::float8 AND {Y_COL} <> '-Infinity'::float8
+        AND {Z_COL} <> 'Infinity'::float8 AND {Z_COL} <> '-Infinity'::float8
         ORDER BY {IDX_COL} ASC
         LIMIT %s;
     """
@@ -177,7 +152,7 @@ def get_start_idx_for_backfill(tag_id: str, backfill_minutes: int) -> int:
         SELECT COALESCE(MIN({IDX_COL}), 0)
         FROM {SOURCE_TABLE}
         WHERE {TAG_COL} = %s
-          AND {TIME_COL} >= NOW() - (%s || ' minutes')::interval;
+        AND {TIME_COL} >= NOW() - (%s || ' minutes')::interval;
     """
     with db_connect() as conn:
         with conn.cursor() as cur:
@@ -265,10 +240,6 @@ def resample_window(
     ts: np.ndarray, x: np.ndarray, y: np.ndarray, z: np.ndarray,
     t_end: datetime, window_seconds: int, n_samples: int
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Resample irregular samples into exactly n_samples spanning [t_end - window_seconds, t_end].
-    Uses linear interpolation on epoch seconds.
-    """
     te = _to_epoch_seconds(t_end)
     t0 = te - float(window_seconds)
 
@@ -407,8 +378,8 @@ def main():
         )
 
     print(f"[infer_vibration_health] start: tags={len(tags)} window={window_seconds}s "
-          f"n_samples={window_size} emit_every={emit_every_seconds}s poll={POLL_SECONDS}s "
-          f"backfill={BACKFILL_MINUTES}min")
+        f"n_samples={window_size} emit_every={emit_every_seconds}s poll={POLL_SECONDS}s "
+        f"backfill={BACKFILL_MINUTES}min")
 
     cycle = 0
     while True:
@@ -437,10 +408,7 @@ def main():
 
                 trim_buffer(rt, keep_seconds=BUFFER_MAX_SECONDS)
 
-            # Establish next_emit_time once we have data
             if rt.next_emit_time is None and rt.ts:
-                # Start emitting at the first timestamp we can reasonably score:
-                # need at least `window_seconds` coverage ending at emit time.
                 rt.next_emit_time = rt.ts[0] + timedelta(seconds=window_seconds)
 
             # Nothing to do if we still have no usable schedule

@@ -108,10 +108,6 @@ def compute_mean_std(x: np.ndarray) -> Tuple[float, float]:
 
 
 def to_windows(z: np.ndarray, window: int, stride: int) -> np.ndarray:
-    """
-    z shape (N,)
-    returns windows shape (M, window)
-    """
     n = z.shape[0]
     if n < window:
         return np.empty((0, window), dtype=np.float32)

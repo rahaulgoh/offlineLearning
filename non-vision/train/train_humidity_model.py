@@ -123,10 +123,6 @@ def compute_mean_std(x: np.ndarray) -> Tuple[float, float]:
 
 
 def to_windows(z: np.ndarray, window: int, stride: int) -> np.ndarray:
-    """
-    z shape (N,)
-    returns windows shape (M, window)
-    """
     n = z.shape[0]
     if n < window:
         return np.empty((0, window), dtype=np.float32)
@@ -173,9 +169,6 @@ def safe_tag_id(tag_id: str) -> str:
 # TRAIN / THRESHOLDS
 # ----------------------------
 def train_generic_model(X: np.ndarray) -> WindowAutoEncoder:
-    """
-    X shape (M, WINDOW_SIZE)
-    """
     model = WindowAutoEncoder(in_dim=X.shape[1])
     model.train()
 
@@ -200,9 +193,6 @@ def train_generic_model(X: np.ndarray) -> WindowAutoEncoder:
 
 
 def reconstruction_errors(model: nn.Module, X: np.ndarray) -> np.ndarray:
-    """
-    Returns per-window MSE errors, shape (M,)
-    """
     model.eval()
     with torch.no_grad():
         x_tensor = torch.tensor(X, dtype=torch.float32)
@@ -213,7 +203,7 @@ def reconstruction_errors(model: nn.Module, X: np.ndarray) -> np.ndarray:
 
 def main() -> None:
     tag_ids = get_all_tag_ids()
-    print(f"Found {len(tag_ids)} sensors. Building training set for generic temperature model.")
+    print(f"Found {len(tag_ids)} sensors. Building training set for generic humidity model.")
 
     per_tag_stats: Dict[str, Dict] = {}
     per_tag_windows: Dict[str, np.ndarray] = {}

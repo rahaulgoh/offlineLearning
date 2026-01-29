@@ -1,25 +1,4 @@
 #! /usr/bin/env python3
-"""
-humid Health Inference (feature-based, unsupervised)
-
-Reads:
-  raw_humid_record(tag_id, idx, value, created_on)
-
-Writes:
-  edge_infer_state(sensor_type='humid_health', tag_id, last_idx, updated_on)
-  edge_humid_health_score(sensor_type, tag_id, window_end_idx, window_end_time,
-                         raw_score, health_score, health_threshold, is_unhealthy,
-                         model_name, created_on)
-
-Assumptions:
-- raw_humid_record.idx is BIGINT and monotonic (autoincrement)
-- Model artifact is a joblib dict: {"scaler": StandardScaler, "model": IsolationForest}
-- humid_health_metadata.json contains:
-    - per_tag_baseline[tag_id] = {mean, std}
-    - health_score_mapping raw_score_lo/raw_score_hi (percentile bounds)
-    - window_size, stride, feature_names, etc.
-"""
-
 import json
 import os
 import time

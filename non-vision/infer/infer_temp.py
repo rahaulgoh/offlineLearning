@@ -1,21 +1,4 @@
 #!/usr/bin/env python3
-"""
-infer_temp.py
-
-Reads:
-    raw_temp_record(tag_id, idx, value, created_on)
-
-Writes:
-    edge_infer_state(sensor_type, tag_id, last_idx, updated_on)
-    edge_temp_anomaly_score(sensor_type, tag_id, window_end_idx, window_end_time,
-                            score, threshold, is_anomaly, model_name, created_on)
-
-Assumes:
-- raw_temp_record.idx is BIGINT and autoincrements
-- temp_metadata.json contains per_tag mean/std/threshold info
-- model_temp.pt is TorchScript taking (1, WINDOW_SIZE) float32.
-"""
-
 import json
 import os
 import time
@@ -109,7 +92,7 @@ def load_state(sensor_type: str, tags: List[str]) -> Dict[str, int]:
         SELECT tag_id, last_idx
         FROM {STATE_TABLE}
         WHERE sensor_type = %s
-          AND tag_id = ANY(%s);
+        AND tag_id = ANY(%s);
     """
     with db_connect() as conn:
         with conn.cursor() as cur:
@@ -147,7 +130,7 @@ def insert_scores(rows: List[Tuple]) -> None:
     q = f"""
         INSERT INTO {SCORE_TABLE}
         (sensor_type, tag_id, window_end_idx, window_end_time,
-         score, threshold, is_anomaly, model_name)
+        score, threshold, is_anomaly, model_name)
         VALUES %s
         ON CONFLICT DO NOTHING;
     """
@@ -172,10 +155,10 @@ def fetch_rows_since(tag_id: str, last_idx: int, limit: int):
         SELECT {IDX_COL}, {VAL_COL}, {TIME_COL}
         FROM {SOURCE_TABLE}
         WHERE {TAG_COL} = %s
-          AND {IDX_COL} > %s
-          AND {VAL_COL} = {VAL_COL}                  -- not NaN
-          AND {VAL_COL} <> 'Infinity'::float8
-          AND {VAL_COL} <> '-Infinity'::float8
+        AND {IDX_COL} > %s
+        AND {VAL_COL} = {VAL_COL}                  
+        AND {VAL_COL} <> 'Infinity'::float8
+        AND {VAL_COL} <> '-Infinity'::float8
         ORDER BY {IDX_COL} ASC
         LIMIT %s;
     """
@@ -227,7 +210,6 @@ def zscore_clip(arr: np.ndarray, mean: float, std: float, clip: float) -> np.nda
 
 
 def recon_mse(model, win: np.ndarray) -> float:
-    # win should already be checked, but be paranoid
     if not np.all(np.isfinite(win)):
         return float("nan")
 
@@ -338,8 +320,6 @@ def main():
                     continue
 
                 if span > max_span:
-                    # If your 60-sample window took > ~60 minutes (for 30s sampling),
-                    # you're missing lots of samples -> skip scoring
                     continue
 
                 # FINITE GUARD: raw window

@@ -196,10 +196,6 @@ def compute_baseline(x: np.ndarray) -> TagBaseline:
 
 
 def normalize_features_per_tag(F: np.ndarray, baseline: TagBaseline) -> np.ndarray:
-    """
-    We normalize temperature-related magnitude by per-tag baseline std so sensors are comparable.
-    We leave “shape-ish” ratios alone where possible.
-    """
     G = F.copy()
 
     # Columns that are temperature magnitude-like:
