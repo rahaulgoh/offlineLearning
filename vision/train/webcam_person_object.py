@@ -98,10 +98,8 @@ class YoloViewer(QWidget):
             cv2.putText(frame, label, (x1, max(20, y1 - 10)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
-        # ✅ Append FINAL count once per frame
         self.count_history.append(person_count)
 
-        # ✅ Compute stable count from history
         sorted_counts = sorted(self.count_history)
         stable_count = sorted_counts[len(sorted_counts) // 2] if sorted_counts else 0
 
@@ -125,7 +123,7 @@ class YoloViewer(QWidget):
                         cv2.FONT_HERSHEY_SIMPLEX, 1.1,
                         (0, 255, 0), 3)
 
-        # ✅ Update UI ONCE per frame
+        # Update UI ONCE per frame
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb.shape
         bytes_per_line = ch * w

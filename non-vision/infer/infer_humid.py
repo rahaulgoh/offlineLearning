@@ -282,7 +282,7 @@ def main():
             upsert_state(sensor_type, state_rows)
 
         if cycle % 30 == 0:
-            print(f"[infer_temp] cycle={cycle} inserted={inserted}")
+            print(f"[infer_humid] cycle={cycle} inserted={inserted}")
 
         time.sleep(POLL_SECONDS)
 
