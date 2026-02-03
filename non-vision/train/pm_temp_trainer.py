@@ -29,7 +29,7 @@ VALUE_COL = "value"
 TIME_COL = "created_on"
 ORDER_COL = "idx"  # assumes monotonic idx exists
 
-OUTPUT_FOLDER = "sensor_models/temp_health"
+OUTPUT_FOLDER = "non-vision/sensor_models/temp_health"
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 # Data pull

@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 def get_connection():
     return psycopg2.connect(**DB_CONFIG)
 
-def get_best_gateway_per_Tag(conn, lookback_minutes):
+def get_best_gateway_per_tag(conn, lookback_minutes):
     cutoff_time = datetime.now() - timedelta(minutes=lookback_minutes)
 
     union_parts = []
@@ -102,7 +102,7 @@ def main():
     while True:
         try:
             conn = get_connection()
-            assignments = get_best_gateway_per_Tag(conn, LOOKBACK_MINUTES)
+            assignments = get_best_gateway_per_tag(conn, LOOKBACK_MINUTES)
             updated = update_assignments(conn, assignments)
             logger.info(f"Updated assignments for {updated} tags.")
             conn.close()

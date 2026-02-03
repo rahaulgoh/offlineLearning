@@ -8,23 +8,23 @@
   "stride": 1,
   "zscore_clip": 8.0,
   "threshold_percentile": 99.0,
-  "trained_at_utc": "2026-01-19T04:08:33.522400+00:00",
-  "training_windows": 19781,
-  "mean_recon_error": 0.03731406852602959,
+  "trained_at_utc": "2026-02-03T01:56:56.455154+00:00",
+  "training_windows": 19799,
+  "mean_recon_error": 0.013591432012617588,
   "per_tag": {
     "F036EB6CB46C": {
-      "mean": 74.82942199707031,
-      "std": 9.128866195678711,
-      "threshold": 0.0828891322016716,
-      "rows_used": 9937,
-      "windows_used": 9878
+      "mean": 68.65626525878906,
+      "std": 7.064050674438477,
+      "threshold": 0.24209173023700714,
+      "rows_used": 9964,
+      "windows_used": 9905
     },
     "F6E3DF68422F": {
-      "mean": 61.8259391784668,
-      "std": 1.5105257034301758,
-      "threshold": 1.2886936664581299,
-      "rows_used": 9962,
-      "windows_used": 9903
+      "mean": 59.956695556640625,
+      "std": 2.612952947616577,
+      "threshold": 0.20765294134616852,
+      "rows_used": 9953,
+      "windows_used": 9894
     }
   }
 }

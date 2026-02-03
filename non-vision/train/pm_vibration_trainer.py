@@ -25,7 +25,7 @@ X_COL, Y_COL, Z_COL = "x_value", "y_value", "z_value"   # <-- adjust if your col
 TIME_COL = "created_on"
 ORDER_COL = "idx"
 
-OUTPUT_FOLDER = "sensor_models/vibration_health"
+OUTPUT_FOLDER = "non-vision/sensor_models/vibration_health"
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 MAX_ROWS_PER_TAG = 20000

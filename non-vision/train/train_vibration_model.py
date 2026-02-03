@@ -25,7 +25,7 @@ VALUE_COL = "value"
 TIME_COL = "created_on"
 ORDER_COL = "idx"
 
-OUTPUT_FOLDER = "sensor_models/vibration"
+OUTPUT_FOLDER = "non-vision/sensor_models/vibration"
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 # Data pull
