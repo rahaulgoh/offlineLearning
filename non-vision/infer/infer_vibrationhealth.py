@@ -344,6 +344,7 @@ def main():
 
     artifact = joblib.load(MODEL_PATH)
     scaler = artifact.get("scaler")
+    pca = artifact["pca"]
     iso = artifact.get("model") or artifact.get("iso")
     if scaler is None or iso is None:
         raise ValueError("Model artifact must contain 'scaler' and ('model' or 'iso').")
@@ -458,6 +459,9 @@ def main():
                         F = np.array([feats[n] for n in feature_names], dtype=np.float32)
                         Xs = scaler.transform(F.reshape(1, -1))
 
+                        if pca is not None:
+                            Xs = pca.transform(Xs)
+                            
                         # trainer used raw_score = -score_samples(...)
                         raw_score = -float(iso.score_samples(Xs)[0])
 
