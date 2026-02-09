@@ -1,20 +1,19 @@
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 import psycopg2
 import torch
 import torch.nn as nn
-from datetime import timezone, datetime
 
 
 # ----------------------------
 # CONFIG
 # ----------------------------
 DB_CONFIG = {
-    "dbname": "postgres",   # change if needed
+    "dbname": "postgres",
     "user": "postgres",
     "password": "mt10ma18",
     "host": "192.168.0.86",
@@ -25,33 +24,28 @@ TABLE_NAME = "raw_humid_record"
 TAG_COL = "tag_id"
 VALUE_COL = "value"
 TIME_COL = "created_on"
-ORDER_COL = "idx"            # if idx exists and is monotonic, keep it; otherwise use created_on
+ORDER_COL = "idx"
 
 OUTPUT_FOLDER = "non-vision/sensor_models/humidity"
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-# Data pull
 MAX_ROWS_PER_TAG = 10000
 MIN_ROWS_PER_TAG = 300
 
-# Windowing (key change vs your per-point model)
 WINDOW_SIZE = 60
 STRIDE = 1
 
-# Training
 EPOCHS = 200
 LR = 3e-4
 GRAD_CLIP_NORM = 1.0
 
-# Thresholding
 THRESH_PERCENTILE = 99.0
 
-# Safety
 ZSCORE_CLIP = 8.0
 
 
 # ----------------------------
-# DB HELPERS 
+# DB HELPERS
 # ----------------------------
 def db_fetchall(query: str, params: Tuple = ()) -> List[Tuple]:
     conn = None
@@ -78,15 +72,11 @@ def get_all_tag_ids() -> List[str]:
 
 
 def fetch_series_for_tag(tag_id: str, limit: int) -> Optional[np.ndarray]:
-    """
-    Fetch values for one tag_id, filtering dirty rows in SQL.
-    Returns np.ndarray shape (N,) float32 or None if not enough clean rows.
-    """
     query = f"""
         SELECT {VALUE_COL}
         FROM {TABLE_NAME}
         WHERE {TAG_COL} = %s
-          AND {VALUE_COL} = {VALUE_COL}                  -- filters NaN
+          AND {VALUE_COL} = {VALUE_COL}
           AND {VALUE_COL} <> 'Infinity'::float8
           AND {VALUE_COL} <> '-Infinity'::float8
         ORDER BY {ORDER_COL} DESC
@@ -97,15 +87,12 @@ def fetch_series_for_tag(tag_id: str, limit: int) -> Optional[np.ndarray]:
         return None
 
     x = np.array([r[0] for r in rows], dtype=np.float64)
-
-    # Extra cleaning in Python (belt and suspenders)
     x = x[np.isfinite(x)]
     x = x.astype(np.float32)
 
     if x.shape[0] < MIN_ROWS_PER_TAG:
         return None
 
-    # Reverse to chronological order (since we pulled DESC)
     x = x[::-1]
     return x
 
@@ -116,7 +103,6 @@ def fetch_series_for_tag(tag_id: str, limit: int) -> Optional[np.ndarray]:
 def compute_mean_std(x: np.ndarray) -> Tuple[float, float]:
     mu = float(np.mean(x))
     sigma = float(np.std(x))
-    # Avoid divide-by-zero for near-constant signals
     if sigma < 1e-8:
         sigma = 1.0
     return mu, sigma
@@ -201,6 +187,9 @@ def reconstruction_errors(model: nn.Module, X: np.ndarray) -> np.ndarray:
     return err.astype(np.float32)
 
 
+# ----------------------------
+# MAIN
+# ----------------------------
 def main() -> None:
     tag_ids = get_all_tag_ids()
     print(f"Found {len(tag_ids)} sensors. Building training set for generic humidity model.")
@@ -250,14 +239,12 @@ def main() -> None:
     final_loss = float(np.mean(train_err))
     print(f"Training complete. Mean reconstruction error: {final_loss:.6f}")
 
-    # Compute per-tag thresholds using the trained generic model
     thresholds: Dict[str, float] = {}
     for tag_id, W in per_tag_windows.items():
         err = reconstruction_errors(model, W)
         thr = float(np.percentile(err, THRESH_PERCENTILE))
         thresholds[tag_id] = thr
 
-    # Save TorchScript model
     model.eval()
     example = torch.zeros((1, WINDOW_SIZE), dtype=torch.float32)
     traced = torch.jit.trace(model, example)
@@ -265,7 +252,6 @@ def main() -> None:
     model_path = os.path.join(OUTPUT_FOLDER, "model_humid.pt")
     traced.save(model_path)
 
-    # Save metadata: per-tag mean/std and per-tag threshold
     metadata = {
         "sensor_type": "humidity",
         "table": TABLE_NAME,

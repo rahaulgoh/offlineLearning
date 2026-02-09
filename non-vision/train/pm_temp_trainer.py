@@ -27,26 +27,22 @@ TABLE_NAME = "raw_temp_record"
 TAG_COL = "tag_id"
 VALUE_COL = "value"
 TIME_COL = "created_on"
-ORDER_COL = "idx"  # assumes monotonic idx exists
+ORDER_COL = "idx"
 
 OUTPUT_FOLDER = "non-vision/sensor_models/temp_health"
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-# Data pull
 MAX_ROWS_PER_TAG = 20000
-MIN_ROWS_PER_TAG = 1500  # temp needs enough history to learn a baseline
+MIN_ROWS_PER_TAG = 1500
 
-# Windowing (in samples, not seconds)
-WINDOW_SIZE = 120   # at 5s/sample => 10 minutes; at 30s/sample => 60 minutes
-STRIDE = 10         # produces one feature row every STRIDE samples
+WINDOW_SIZE = 120
+STRIDE = 10
 
-# Model
 N_ESTIMATORS = 300
-CONTAMINATION = "auto"   # unsupervised; IF will infer expected outlier rate
+CONTAMINATION = "auto"
 RANDOM_STATE = 42
 
-# Health score mapping
-HEALTH_CLIP_LO = 0.5   # percentile bounds used to map scores to 0..100
+HEALTH_CLIP_LO = 0.5
 HEALTH_CLIP_HI = 99.5
 
 
@@ -72,14 +68,11 @@ def get_all_tag_ids() -> List[str]:
 
 
 def fetch_series_for_tag(tag_id: str, limit: int) -> Optional[np.ndarray]:
-    """
-    Returns values in chronological order, cleaned for NaN/Inf.
-    """
     q = f"""
         SELECT {VALUE_COL}
         FROM {TABLE_NAME}
         WHERE {TAG_COL} = %s
-          AND {VALUE_COL} = {VALUE_COL}                  -- filters NaN
+          AND {VALUE_COL} = {VALUE_COL}
           AND {VALUE_COL} <> 'Infinity'::float8
           AND {VALUE_COL} <> '-Infinity'::float8
         ORDER BY {ORDER_COL} DESC
@@ -95,16 +88,13 @@ def fetch_series_for_tag(tag_id: str, limit: int) -> Optional[np.ndarray]:
     if x.shape[0] < MIN_ROWS_PER_TAG:
         return None
 
-    return x[::-1]  # chronological
+    return x[::-1]
 
 
 # ----------------------------
 # Feature extraction
 # ----------------------------
 def _slope(y: np.ndarray) -> float:
-    """
-    Simple linear regression slope (per sample).
-    """
     n = y.size
     if n < 2:
         return 0.0
@@ -118,29 +108,21 @@ def _slope(y: np.ndarray) -> float:
 
 
 def window_features(x: np.ndarray) -> np.ndarray:
-    """
-    x: window values (raw temperature)
-    returns feature vector
-    """
     mu = float(np.mean(x))
     sd = float(np.std(x))
     mn = float(np.min(x))
     mx = float(np.max(x))
     p2p = mx - mn
 
-    # deltas
     dx = np.diff(x)
     mad_delta = float(np.mean(np.abs(dx))) if dx.size else 0.0
 
-    # slope & residual noise
     sl = _slope(x)
-    # residuals after removing linear trend
     t = np.arange(x.size, dtype=np.float32)
     fit = (sl * (t - np.mean(t))) + mu
     resid = x - fit
     resid_std = float(np.std(resid))
 
-    # “energy” here is just mean squared value (after centering)
     energy = float(np.mean((x - mu) ** 2))
 
     return np.array(
@@ -198,8 +180,6 @@ def compute_baseline(x: np.ndarray) -> TagBaseline:
 def normalize_features_per_tag(F: np.ndarray, baseline: TagBaseline) -> np.ndarray:
     G = F.copy()
 
-    # Columns that are temperature magnitude-like:
-    # mean, min, max, peak_to_peak
     idx_mean = 0
     idx_min = 2
     idx_max = 3
@@ -211,8 +191,6 @@ def normalize_features_per_tag(F: np.ndarray, baseline: TagBaseline) -> np.ndarr
     G[:, idx_max]  = (G[:, idx_max]  - baseline.mean) / s
     G[:, idx_p2p]  = G[:, idx_p2p] / s
 
-    # slope per sample and deltas already scale with temperature;
-    # scale those too so different sensors have comparable “rate” units.
     idx_mad = 5
     idx_slope = 6
     G[:, idx_mad] = G[:, idx_mad] / s
@@ -259,11 +237,9 @@ def main():
 
     print(f"[temp_health_train] Training windows={X.shape[0]} features={X.shape[1]} tags_used={tags_used}")
 
-    # Global scaling across all tags (after per-tag baseline normalization)
     scaler = StandardScaler()
     Xs = scaler.fit_transform(X)
 
-    # Unsupervised model
     model = IsolationForest(
         n_estimators=N_ESTIMATORS,
         contamination=CONTAMINATION,
@@ -272,14 +248,11 @@ def main():
     )
     model.fit(Xs)
 
-    # Save score distribution to map to 0..100 health score later
-    # IsolationForest.score_samples: higher = more normal, lower = more anomalous
     raw_scores = model.score_samples(Xs).astype(np.float32)
 
     lo = float(np.percentile(raw_scores, HEALTH_CLIP_LO))
     hi = float(np.percentile(raw_scores, HEALTH_CLIP_HI))
 
-    # Save artifacts
     artifact = {
         "scaler": scaler,
         "model": model,
@@ -305,7 +278,6 @@ def main():
             "raw_score_percentile_hi": HEALTH_CLIP_HI,
             "raw_score_lo": lo,
             "raw_score_hi": hi,
-            "note": "IsolationForest score_samples: higher=more normal. Health score maps lower raw_score -> higher health.",
         },
         "per_tag_baseline": {
             tag_id: asdict(baseline) for tag_id, baseline in per_tag_baseline.items()

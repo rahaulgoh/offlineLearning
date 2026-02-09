@@ -8,6 +8,7 @@ import psycopg2
 import torch
 import torch.nn as nn
 
+
 # ----------------------------
 # CONFIG
 # ----------------------------
@@ -28,24 +29,20 @@ ORDER_COL = "idx"
 OUTPUT_FOLDER = "non-vision/sensor_models/vibration"
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-# Data pull
 MAX_ROWS_PER_TAG = 10000
 MIN_ROWS_PER_TAG = 300
 
-# Windowing 
 WINDOW_SIZE = 60
 STRIDE = 1
 
-# Training
 EPOCHS = 200
 LR = 3e-4
 GRAD_CLIP_NORM = 1.0
 
-# Thresholding
 THRESH_PERCENTILE = 99.0
 
-# Safety
 ZSCORE_CLIP = 8.0
+
 
 # ----------------------------
 # DB HELPERS
@@ -62,6 +59,7 @@ def db_fetchall(query: str, params: Tuple = ()) -> List[Tuple]:
         if conn is not None:
             conn.close()
 
+
 def get_all_tag_ids() -> List[str]:
     q = f"SELECT DISTINCT {TAG_COL} FROM {TABLE_NAME}"
     rows = db_fetchall(q)
@@ -72,12 +70,13 @@ def get_all_tag_ids() -> List[str]:
         out.append(str(tag))
     return out
 
+
 def fetch_series_for_tag(tag_id: str, limit: int) -> Optional[np.ndarray]:
     query = f"""
         SELECT {VALUE_COL}
         FROM {TABLE_NAME}
         WHERE {TAG_COL} = %s
-          AND {VALUE_COL} = {VALUE_COL}                  -- filters NaN
+          AND {VALUE_COL} = {VALUE_COL}
           AND {VALUE_COL} <> 'Infinity'::float8
           AND {VALUE_COL} <> '-Infinity'::float8
         ORDER BY {ORDER_COL} DESC
@@ -93,8 +92,8 @@ def fetch_series_for_tag(tag_id: str, limit: int) -> Optional[np.ndarray]:
     if x.shape[0] < MIN_ROWS_PER_TAG:
         return None
 
-    # Reverse to chronological order (since we pulled DESC)
     return x[::-1]
+
 
 # ----------------------------
 # PREPROCESSING
@@ -230,14 +229,12 @@ def main() -> None:
     final_loss = float(np.mean(train_err))
     print(f"Training complete. Mean reconstruction error: {final_loss:.6f}")
 
-    # Compute per-tag thresholds using the trained generic model
     thresholds: Dict[str, float] = {}
     for tag_id, W in per_tag_windows.items():
         err = reconstruction_errors(model, W)
         thr = float(np.percentile(err, THRESH_PERCENTILE))
         thresholds[tag_id] = thr
 
-    # Save TorchScript model
     model.eval()
     example = torch.zeros((1, WINDOW_SIZE), dtype=torch.float32)
     traced = torch.jit.trace(model, example)
@@ -245,7 +242,6 @@ def main() -> None:
     model_path = os.path.join(OUTPUT_FOLDER, "model_vibration.pt")
     traced.save(model_path)
 
-    # Save metadata
     metadata = {
         "sensor_type": "vibration",
         "table": TABLE_NAME,

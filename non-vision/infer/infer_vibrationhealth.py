@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#!/usr/bin/env python3
 import json
 import os
 import time
@@ -25,32 +25,29 @@ DB_CONFIG = {
 }
 
 SOURCE_TABLE = "raw_vibration_record"
-STATE_TABLE  = "edge_infer_state"
-SCORE_TABLE  = "edge_vibration_health_score"
+STATE_TABLE = "edge_infer_state"
+SCORE_TABLE = "edge_vibration_health_score"
 
-TAG_COL  = "tag_id"
-IDX_COL  = "idx"
-X_COL    = "x_value"
-Y_COL    = "y_value"
-Z_COL    = "z_value"
+TAG_COL = "tag_id"
+IDX_COL = "idx"
+X_COL = "x_value"
+Y_COL = "y_value"
+Z_COL = "z_value"
 TIME_COL = "created_on"
 
 SENSOR_TYPE = "vibration_health"
 
 MODEL_PATH = "/opt/edge/models/vibration_health/model_vibration_health.joblib"
-META_PATH  = "/opt/edge/models/vibration_health/vibration_health_metadata.json"
+META_PATH = "/opt/edge/models/vibration_health/vibration_health_metadata.json"
 
-# Polling & backfill
 POLL_SECONDS = 2.0
 FETCH_LIMIT = 8000
 BACKFILL_MINUTES = 30
 
-# Time-windowing
-WINDOW_SECONDS = 60          # health features computed over last 60s of data
-EMIT_EVERY_SECONDS = 5       # write a point every 5s (per tag), if enough data
+WINDOW_SECONDS = 60
+EMIT_EVERY_SECONDS = 5
 
-# Buffer safety (how much raw history we keep in RAM per tag)
-BUFFER_MAX_SECONDS = 15 * 60  # keep 15 minutes in memory; plenty for a 60s window
+BUFFER_MAX_SECONDS = 15 * 60
 
 DEFAULT_HEALTH_THRESHOLD = 70.0
 
@@ -61,7 +58,6 @@ DEFAULT_HEALTH_THRESHOLD = 70.0
 @dataclass
 class TagRuntime:
     last_idx: int
-    # store raw points as deques aligned by index
     ts: Deque[datetime]
     x: Deque[float]
     y: Deque[float]
@@ -75,6 +71,7 @@ class TagRuntime:
 # ----------------------------
 def db_connect():
     return psycopg2.connect(**DB_CONFIG)
+
 
 def load_state(sensor_type: str, tags: List[str]) -> Dict[str, int]:
     out = {t: 0 for t in tags}
@@ -94,6 +91,7 @@ def load_state(sensor_type: str, tags: List[str]) -> Dict[str, int]:
                 out[str(tag_id)] = int(last_idx)
     return out
 
+
 def upsert_state(sensor_type: str, rows: List[Tuple[str, int]]) -> None:
     if not rows:
         return
@@ -111,6 +109,7 @@ def upsert_state(sensor_type: str, rows: List[Tuple[str, int]]) -> None:
             psycopg2.extras.execute_values(cur, q, values, page_size=500)
         conn.commit()
 
+
 def insert_scores(rows: List[Tuple]) -> None:
     if not rows:
         return
@@ -127,8 +126,8 @@ def insert_scores(rows: List[Tuple]) -> None:
             psycopg2.extras.execute_values(cur, q, rows, page_size=500)
         conn.commit()
 
+
 def fetch_rows_since_idx(tag_id: str, last_idx: int, limit: int):
-    # using idx for incremental fetch is fast + avoids timezone weirdness
     q = f"""
         SELECT {IDX_COL}, {X_COL}, {Y_COL}, {Z_COL}, {TIME_COL}
         FROM {SOURCE_TABLE}
@@ -146,8 +145,8 @@ def fetch_rows_since_idx(tag_id: str, last_idx: int, limit: int):
             cur.execute(q, (tag_id, last_idx, limit))
             return cur.fetchall()
 
+
 def get_start_idx_for_backfill(tag_id: str, backfill_minutes: int) -> int:
-    # Find the first idx at/after (NOW - backfill_minutes). If none, return 0.
     q = f"""
         SELECT COALESCE(MIN({IDX_COL}), 0)
         FROM {SOURCE_TABLE}
@@ -172,6 +171,7 @@ def _kurtosis(x: np.ndarray) -> float:
     z = (x - mu) / sd
     return float(np.mean(z**4))
 
+
 def _basic(v: np.ndarray):
     v = v.astype(np.float64)
     mu = float(np.mean(v))
@@ -182,6 +182,7 @@ def _basic(v: np.ndarray):
     crest = float(maxabs / (rms + 1e-8))
     kurt = _kurtosis(v)
     return mu, sd, rms, ptp, maxabs, crest, kurt
+
 
 def _slope(v: np.ndarray) -> float:
     n = v.size
@@ -195,12 +196,14 @@ def _slope(v: np.ndarray) -> float:
         return 0.0
     return float(np.sum(t * y) / denom)
 
+
 def _corr(a: np.ndarray, b: np.ndarray) -> float:
     sa = float(np.std(a))
     sb = float(np.std(b))
     if sa < 1e-8 or sb < 1e-8:
         return 0.0
     return float(np.corrcoef(a, b)[0, 1])
+
 
 def compute_feature_dict(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> Dict[str, float]:
     m = np.sqrt(x*x + y*y + z*z)
@@ -231,10 +234,10 @@ def compute_feature_dict(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> Dict[st
 # RESAMPLING (time -> fixed length)
 # ----------------------------
 def _to_epoch_seconds(t: datetime) -> float:
-    # Ensure timezone-aware; if DB returns naive, treat as local time (still monotonic)
     if t.tzinfo is None:
         return t.timestamp()
     return t.astimezone(timezone.utc).timestamp()
+
 
 def resample_window(
     ts: np.ndarray, x: np.ndarray, y: np.ndarray, z: np.ndarray,
@@ -243,20 +246,16 @@ def resample_window(
     te = _to_epoch_seconds(t_end)
     t0 = te - float(window_seconds)
 
-    # target timeline (inclusive end)
     t_target = np.linspace(t0, te, num=n_samples, dtype=np.float64)
 
-    # Need strictly increasing ts for np.interp
     t_src = np.array([_to_epoch_seconds(t) for t in ts], dtype=np.float64)
     order = np.argsort(t_src)
     t_src = t_src[order]
     x = x[order]; y = y[order]; z = z[order]
 
-    # If too few points, bail
     if t_src.size < 2:
         raise ValueError("Not enough points to resample")
 
-    # clip to window (keep a bit wider so interpolation works)
     mask = (t_src >= t0 - 1.0) & (t_src <= te + 1.0)
     t_src = t_src[mask]; x = x[mask]; y = y[mask]; z = z[mask]
     if t_src.size < 2:
@@ -310,7 +309,6 @@ def load_metadata(path: str):
 
     health_threshold = float(meta.get("health_threshold", DEFAULT_HEALTH_THRESHOLD))
 
-    # Optional (if you later add these to metadata)
     window_seconds = int(meta.get("window_seconds", WINDOW_SECONDS))
     emit_every_seconds = int(meta.get("emit_every_seconds", EMIT_EVERY_SECONDS))
 
@@ -355,7 +353,6 @@ def main():
     if not tags_used:
         raise ValueError("metadata.tags_used is empty; model has no tags to run on.")
 
-    # NOTE: stride is row-based in old trainer; for time-based emit we use emit_every_seconds instead.
     tags = tags_used
     state = load_state(SENSOR_TYPE, tags)
 
@@ -363,7 +360,6 @@ def main():
     for tag_id in tags:
         last_idx = int(state.get(tag_id, 0) or 0)
 
-        # Time-based backfill on cold start
         if last_idx <= 0:
             last_idx = max(0, get_start_idx_for_backfill(tag_id, BACKFILL_MINUTES) - 1)
 
@@ -411,19 +407,15 @@ def main():
             if rt.next_emit_time is None and rt.ts:
                 rt.next_emit_time = rt.ts[0] + timedelta(seconds=window_seconds)
 
-            # Nothing to do if we still have no usable schedule
             if rt.next_emit_time is None or not rt.ts:
                 state_rows.append((tag_id, rt.last_idx))
                 continue
 
             latest_time = rt.ts[-1]
-            # Emit as many points as we can up to latest_time
             while rt.next_emit_time <= latest_time:
                 t_end = rt.next_emit_time
                 t_start = t_end - timedelta(seconds=window_seconds)
 
-                # Slice buffer to just the window
-                # (linear scan is ok with small deque; if needed we can optimize)
                 ts_list = []
                 x_list = []
                 y_list = []
@@ -441,7 +433,6 @@ def main():
                     z_list.append(rt.z[i])
                     idx_list.append(rt.idx[i])
 
-                # Need enough points to resample reliably
                 if len(ts_list) >= 2:
                     try:
                         Xr, Yr, Zr = resample_window(
@@ -458,7 +449,6 @@ def main():
                         F = np.array([feats[n] for n in feature_names], dtype=np.float32)
                         Xs = scaler.transform(F.reshape(1, -1))
 
-                        # trainer used raw_score = -score_samples(...)
                         raw_score = -float(iso.score_samples(Xs)[0])
 
                         health = map_health_piecewise(raw_score, xq, yq)
@@ -478,7 +468,6 @@ def main():
                             model_name,
                         ))
                     except Exception:
-                        # If resampling/scoring fails for this emit tick, just skip it.
                         pass
 
                 rt.next_emit_time = rt.next_emit_time + timedelta(seconds=emit_every_seconds)

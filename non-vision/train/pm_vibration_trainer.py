@@ -19,9 +19,9 @@ DB_CONFIG = {
     "port": "5432",
 }
 
-TABLE_NAME = "raw_vibration_record"   # <-- your tri-axis table
+TABLE_NAME = "raw_vibration_record"
 TAG_COL = "tag_id"
-X_COL, Y_COL, Z_COL = "x_value", "y_value", "z_value"   # <-- adjust if your columns differ
+X_COL, Y_COL, Z_COL = "x_value", "y_value", "z_value"
 TIME_COL = "created_on"
 ORDER_COL = "idx"
 
@@ -31,16 +31,13 @@ os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 MAX_ROWS_PER_TAG = 20000
 MIN_ROWS_PER_TAG = 2000
 
-# Windowing in SAMPLES (adjust for your sampling rate)
 WINDOW_SIZE = 200
 STRIDE = 50
 
-# IF model
 N_ESTIMATORS = 200
 CONTAMINATION = "auto"
 RANDOM_STATE = 42
 
-# Quantiles used for health mapping
 HEALTH_QUANTS = [0.50, 0.90, 0.95, 0.99]
 
 # ----------------------------
@@ -74,13 +71,12 @@ def fetch_xyz_for_tag(tag_id: str, limit: int) -> Optional[np.ndarray]:
     arr = arr[np.all(np.isfinite(arr), axis=1)]
     if arr.shape[0] < MIN_ROWS_PER_TAG:
         return None
-    return arr[::-1].astype(np.float32)  # chronological
+    return arr[::-1].astype(np.float32)
 
 # ----------------------------
 # FEATURE ENGINEERING
 # ----------------------------
 def kurtosis(x: np.ndarray) -> float:
-    # excess kurtosis-ish, stable enough for monitoring
     mu = float(np.mean(x))
     s = float(np.std(x))
     if s < 1e-8:
@@ -109,7 +105,6 @@ def basic_feats(v: np.ndarray) -> Dict[str, float]:
     }
 
 def slope(v: np.ndarray) -> float:
-    # simple linear regression slope vs index
     n = v.shape[0]
     t = np.arange(n, dtype=np.float64)
     y = v.astype(np.float64)
@@ -132,7 +127,6 @@ def window_features(xyz: np.ndarray) -> Tuple[np.ndarray, List[str]]:
 
     feats["m_slope"] = slope(m)
 
-    # Cross-axis correlation (handle degenerate variance)
     def corr(a, b) -> float:
         sa, sb = np.std(a), np.std(b)
         if sa < 1e-8 or sb < 1e-8:
@@ -165,9 +159,7 @@ def to_feature_windows(xyz: np.ndarray, window: int, stride: int) -> Tuple[np.nd
 # HEALTH MAPPING
 # ----------------------------
 def build_health_mapper(train_scores: np.ndarray) -> Dict:
-    # train_scores: higher = worse
     qs = np.quantile(train_scores, HEALTH_QUANTS).astype(np.float64)
-    # Map q50->0, q90->50, q95->70, q99->100 (tweakable but sane)
     xq = qs
     yq = np.array([0, 50, 70, 100], dtype=np.float64)
     return {"xq": xq.tolist(), "yq": yq.tolist()}
@@ -217,12 +209,10 @@ def main():
     )
     iso.fit(Xs)
 
-    # raw_score: higher = worse (invert score_samples where higher means more normal)
     raw_scores = (-iso.score_samples(Xs)).astype(np.float64)
 
     mapper = build_health_mapper(raw_scores)
 
-    # health threshold default at 70 maps ~q95 by our mapping
     model_path = os.path.join(OUTPUT_FOLDER, "model_vibration_health.joblib")
     joblib.dump({"scaler": scaler, "iso": iso, "feature_names": feature_names, "mapper": mapper}, model_path)
 
@@ -239,7 +229,6 @@ def main():
         "tags_used": kept,
         "feature_names": feature_names,
         "health_mapper": mapper,
-        "note": "raw_score = -IsolationForest.score_samples(scaled_features)"
     }
     meta_path = os.path.join(OUTPUT_FOLDER, "vibration_health_metadata.json")
     with open(meta_path, "w", encoding="utf-8") as f:
