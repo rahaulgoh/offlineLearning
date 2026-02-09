@@ -121,7 +121,7 @@ def insert_scores(rows: List[Tuple]) -> None:
     q = f"""
         INSERT INTO {SCORE_TABLE}
         (sensor_type, tag_id, window_end_idx, window_end_time,
-         raw_score, health_score, health_threshold, is_unhealthy, model_name)
+        raw_score, health_score, health_threshold, is_unhealthy, model_name)
         VALUES %s
         ON CONFLICT (sensor_type, tag_id, window_end_idx) DO NOTHING;
     """
