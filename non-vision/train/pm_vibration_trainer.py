@@ -42,6 +42,8 @@ RANDOM_STATE = 42
 
 HEALTH_QUANTS = [0.50, 0.90, 0.95, 0.99]
 
+PCA_VARIANCE_THRESHOLD = 0.95
+
 # ----------------------------
 # DB HELPERS
 # ----------------------------
@@ -230,7 +232,7 @@ def main():
     val_q95 = np.quantile(val_scores, 0.95)
     print(f"95th percentile - Train: {train_q95:.4f}, Validation: {val_q95:.4f}")
 
-    raw_scores = (-iso.score_samples(Xs)).astype(np.float64)
+    raw_scores = (-iso.score_samples(Xs_train_pca)).astype(np.float64)
 
     mapper = build_health_mapper(train_scores)
 

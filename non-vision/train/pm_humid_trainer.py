@@ -72,9 +72,9 @@ def fetch_series_for_tag(tag_id: str, limit: int) -> Optional[np.ndarray]:
         SELECT {VALUE_COL}
         FROM {TABLE_NAME}
         WHERE {TAG_COL} = %s
-          AND {VALUE_COL} = {VALUE_COL}
-          AND {VALUE_COL} <> 'Infinity'::float8
-          AND {VALUE_COL} <> '-Infinity'::float8
+            AND {VALUE_COL} = {VALUE_COL}
+            AND {VALUE_COL} <> 'Infinity'::float8
+            AND {VALUE_COL} <> '-Infinity'::float8
         ORDER BY {ORDER_COL} DESC
         LIMIT %s;
     """
