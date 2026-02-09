@@ -342,6 +342,7 @@ def main():
 
     artifact = joblib.load(MODEL_PATH)
     scaler = artifact.get("scaler")
+    pca = artifact["pca"]
     iso = artifact.get("model") or artifact.get("iso")
     if scaler is None or iso is None:
         raise ValueError("Model artifact must contain 'scaler' and ('model' or 'iso').")

@@ -6,6 +6,8 @@ import numpy as np
 import psycopg2
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.decomposition import PCA
 import joblib
 
 # ----------------------------
@@ -29,10 +31,10 @@ OUTPUT_FOLDER = "non-vision/sensor_models/vibration_health"
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 MAX_ROWS_PER_TAG = 20000
-MIN_ROWS_PER_TAG = 2000
+MIN_ROWS_PER_TAG = 7000
 
 WINDOW_SIZE = 200
-STRIDE = 50
+STRIDE = 35
 
 N_ESTIMATORS = 200
 CONTAMINATION = "auto"
@@ -195,11 +197,20 @@ def main():
     if not all_X:
         raise RuntimeError("No tags had enough data to train vibration health model.")
 
-    X_train = np.vstack(all_X).astype(np.float32)
-    print(f"Training feature windows: {X_train.shape}")
+    X_all = np.vstack(all_X).astype(np.float32)
+    print(f"Total feature windows: {X_all.shape}")
+
+    X_train, X_val = train_test_split(X_all, test_size=0.2, random_state=RANDOM_STATE)
+    print(f"Training on {X_train.shape[0]} samples, validating on {X_val.shape[0]} samples.")
 
     scaler = StandardScaler()
-    Xs = scaler.fit_transform(X_train)
+    Xs_train = scaler.fit_transform(X_train)
+    Xs_val = scaler.transform(X_val)
+
+    pca = PCA(n_components = PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)
+    Xs_train_pca = pca.fit_transform(Xs_train)
+    Xs_val_pca = pca.transform(Xs_val)
+    print(f"PCA reduced {Xs_train.shape[1]} features to {Xs_train_pca.shape[1]} components ({pca.explained_variance_ratio_.sum():.1%})")
 
     iso = IsolationForest(
         n_estimators=N_ESTIMATORS,
@@ -207,14 +218,30 @@ def main():
         random_state=RANDOM_STATE,
         n_jobs=-1,
     )
-    iso.fit(Xs)
+    iso.fit(Xs_train_pca)
+
+    train_scores = -iso.score_samples(Xs_train_pca)
+    val_scores = -iso.score_samples(Xs_val_pca)
+
+    print(f"Train scores - mean: {train_scores.mean():.4f}, std: {train_scores.std():.4f}")
+    print(f"Validation scores - mean: {val_scores.mean():.4f}, std: {val_scores.std():.4f}")
+
+    train_q95 = np.quantile(train_scores, 0.95)
+    val_q95 = np.quantile(val_scores, 0.95)
+    print(f"95th percentile - Train: {train_q95:.4f}, Validation: {val_q95:.4f}")
 
     raw_scores = (-iso.score_samples(Xs)).astype(np.float64)
 
-    mapper = build_health_mapper(raw_scores)
+    mapper = build_health_mapper(train_scores)
 
     model_path = os.path.join(OUTPUT_FOLDER, "model_vibration_health.joblib")
-    joblib.dump({"scaler": scaler, "iso": iso, "feature_names": feature_names, "mapper": mapper}, model_path)
+    joblib.dump({
+        "scaler": scaler, 
+        "pca": pca,
+        "iso": iso, 
+        "feature_names": feature_names, 
+        "mapper": mapper
+    }, model_path)
 
     meta = {
         "sensor_type": "vibration_health",
@@ -228,6 +255,8 @@ def main():
         "trained_at_utc": datetime.now(timezone.utc).isoformat(),
         "tags_used": kept,
         "feature_names": feature_names,
+        "pca_components": int(Xs_train_pca.shape[1]),
+        "pca_variance_explained": float(pca.explained_variance_ratio_.sum()),
         "health_mapper": mapper,
     }
     meta_path = os.path.join(OUTPUT_FOLDER, "vibration_health_metadata.json")
