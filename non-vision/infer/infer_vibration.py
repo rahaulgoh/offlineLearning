@@ -10,10 +10,10 @@ import psycopg2
 import psycopg2.extras
 import torch
 
-# ---------
-# CONFIG
-#----------
 
+# ----------------------------
+# CONFIG
+# ----------------------------
 DB_CONFIG = {
     "dbname": "postgres",
     "user": "postgres",
@@ -32,7 +32,7 @@ VAL_COL = "value"
 TIME_COL = "created_on"
 
 MODEL_PATH = "/opt/edge/models/vibration/model_vibration.pt"
-META_PATH  = "/opt/edge/models/vibration/vibration_metadata.json"
+META_PATH = "/opt/edge/models/vibration/vibration_metadata.json"
 
 POLL_SECONDS = 2.0
 FETCH_LIMIT = 2000
@@ -51,6 +51,7 @@ class TagMeta:
     std: float
     threshold: float
 
+
 @dataclass
 class TagRuntime:
     last_idx: int
@@ -64,6 +65,7 @@ class TagRuntime:
 def db_connect():
     return psycopg2.connect(**DB_CONFIG)
 
+
 def fetch_distinct_tags() -> List[str]:
     q = f"SELECT DISTINCT {TAG_COL} FROM {SOURCE_TABLE}"
     with db_connect() as conn:
@@ -71,6 +73,7 @@ def fetch_distinct_tags() -> List[str]:
             cur.execute(q)
             rows = cur.fetchall()
         return [str(r[0]) for r in rows if r and r[0] is not None]
+
 
 def load_state(sensor_type: str, tags: List[str]) -> Dict[str, int]:
     out = {t: 0 for t in tags}
@@ -90,6 +93,7 @@ def load_state(sensor_type: str, tags: List[str]) -> Dict[str, int]:
                 out[str(tag_id)] = int(last_idx)
     return out
 
+
 def upsert_state(sensor_type: str, rows: List[Tuple[str, int]]) -> None:
     if not rows:
         return
@@ -107,6 +111,7 @@ def upsert_state(sensor_type: str, rows: List[Tuple[str, int]]) -> None:
             psycopg2.extras.execute_values(cur, q, values, page_size=500)
         conn.commit()
 
+
 def insert_scores(rows: List[Tuple]) -> None:
     if not rows:
         return
@@ -123,6 +128,7 @@ def insert_scores(rows: List[Tuple]) -> None:
             psycopg2.extras.execute_values(cur, q, rows, page_size=500)
         conn.commit()
 
+
 def get_max_idx_for_tag(tag_id: str) -> int:
     q = f"SELECT COALESCE(MAX({IDX_COL}), 0) FROM {SOURCE_TABLE} WHERE {TAG_COL} = %s;"
     with db_connect() as conn:
@@ -130,6 +136,7 @@ def get_max_idx_for_tag(tag_id: str) -> int:
             cur.execute(q, (tag_id,))
             (mx,) = cur.fetchone()
         return int(mx or 0)
+
 
 def fetch_rows_since(tag_id: str, last_idx: int, limit: int):
     q = f"""
@@ -170,14 +177,16 @@ def load_metadata(path: str):
 
     return sensor_type, window_size, zclip, per_tag
 
+
 def zscore_clip(arr: np.ndarray, mean: float, std: float, clip: float) -> np.ndarray:
     s = std if std != 0 else 1.0
     z = (arr - mean) / s
     z = np.clip(z, -clip, clip).astype(np.float32)
     return z
 
+
 def recon_mse(model, win: np.ndarray) -> float:
-    x = torch.from_numpy(win).unsqueeze(0)  # (1, W)
+    x = torch.from_numpy(win).unsqueeze(0)
     with torch.no_grad():
         y = model(x)
         err = torch.mean((y - x) ** 2, dim=1).item()
@@ -280,6 +289,7 @@ def main():
             print(f"[infer_vibration] cycle={cycle} inserted={inserted}")
 
         time.sleep(POLL_SECONDS)
+
 
 if __name__ == "__main__":
     main()

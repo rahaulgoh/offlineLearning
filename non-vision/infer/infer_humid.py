@@ -10,12 +10,12 @@ import psycopg2
 import psycopg2.extras
 import torch
 
-# ---------
-# CONFIG
-#----------
 
+# ----------------------------
+# CONFIG
+# ----------------------------
 DB_CONFIG = {
-    "dbname": "postgres",  
+    "dbname": "postgres",
     "user": "postgres",
     "password": "mt10ma18",
     "host": "192.168.0.86",
@@ -41,6 +41,7 @@ TORCH_THREADS = 1
 
 BACKFILL_ROWS = 5000
 
+
 # ----------------------------
 # TYPES
 # ----------------------------
@@ -50,11 +51,12 @@ class TagMeta:
     std: float
     threshold: float
 
+
 @dataclass
 class TagRuntime:
     last_idx: int
     window: Deque[float]
-    window_time: Deque[object] 
+    window_time: Deque[object]
 
 
 # ----------------------------
@@ -63,6 +65,7 @@ class TagRuntime:
 def db_connect():
     return psycopg2.connect(**DB_CONFIG)
 
+
 def fetch_distinct_tags() -> List[str]:
     q = f"SELECT DISTINCT {TAG_COL} FROM {SOURCE_TABLE}"
     with db_connect() as conn:
@@ -70,12 +73,13 @@ def fetch_distinct_tags() -> List[str]:
             cur.execute(q)
             rows = cur.fetchall()
         return [str(r[0]) for r in rows if r and r[0] is not None]
-    
+
+
 def load_state(sensor_type: str, tags: List[str]) -> Dict[str, int]:
     out = {t: 0 for t in tags}
     if not tags:
         return out
-    
+
     q = f"""
         SELECT tag_id, last_idx
         FROM {STATE_TABLE}
@@ -89,10 +93,8 @@ def load_state(sensor_type: str, tags: List[str]) -> Dict[str, int]:
                 out[str(tag_id)] = int(last_idx)
     return out
 
+
 def upsert_state(sensor_type: str, rows: List[Tuple[str, int]]) -> None:
-    """
-    rows: [(tag_id, last_idx), ...]
-    """
     if not rows:
         return
 
@@ -113,18 +115,19 @@ def upsert_state(sensor_type: str, rows: List[Tuple[str, int]]) -> None:
 def insert_scores(rows: List[Tuple]) -> None:
     if not rows:
         return
-    
+
     q = f"""
         INSERT INTO {SCORE_TABLE}
-        (sensor_type, tag_id, window_end_idx, window_end_time, 
+        (sensor_type, tag_id, window_end_idx, window_end_time,
          score, threshold, is_anomaly, model_name)
         VALUES %s
         ON CONFLICT DO NOTHING;
     """
     with db_connect() as conn:
         with conn.cursor() as cur:
-            psycopg2.extras.execute_values(cur, q, rows, page_size = 500)
+            psycopg2.extras.execute_values(cur, q, rows, page_size=500)
         conn.commit()
+
 
 def get_max_idx_for_tag(tag_id: str) -> int:
     q = f"SELECT COALESCE(MAX({IDX_COL}), 0) FROM {SOURCE_TABLE} WHERE {TAG_COL} = %s;"
@@ -133,7 +136,8 @@ def get_max_idx_for_tag(tag_id: str) -> int:
             cur.execute(q, (tag_id,))
             (mx,) = cur.fetchone()
         return int(mx or 0)
-    
+
+
 def fetch_rows_since(tag_id: str, last_idx: int, limit: int):
     q = f"""
         SELECT {IDX_COL}, {VAL_COL}, {TIME_COL}
@@ -150,7 +154,8 @@ def fetch_rows_since(tag_id: str, last_idx: int, limit: int):
         with conn.cursor() as cur:
             cur.execute(q, (tag_id, last_idx, limit))
             return cur.fetchall()
-        
+
+
 # ----------------------------
 # MODEL UTILS
 # ----------------------------
@@ -165,12 +170,13 @@ def load_metadata(path: str):
     per_tag = {}
     for tag_id, d in meta.get("per_tag", {}).items():
         per_tag[str(tag_id)] = TagMeta(
-            mean = float(d["mean"]),
-            std = float(d["std"]),
-            threshold = float(d["threshold"])
+            mean=float(d["mean"]),
+            std=float(d["std"]),
+            threshold=float(d["threshold"])
         )
-    
+
     return sensor_type, window_size, zclip, per_tag
+
 
 def zscore_clip(arr: np.ndarray, mean: float, std: float, clip: float) -> np.ndarray:
     s = std if std != 0 else 1.0
@@ -178,12 +184,13 @@ def zscore_clip(arr: np.ndarray, mean: float, std: float, clip: float) -> np.nda
     z = np.clip(z, -clip, clip).astype(np.float32)
     return z
 
+
 def recon_mse(model, win: np.ndarray) -> float:
-	x = torch.from_numpy(win).unsqueeze(0)  # (1, W)
-	with torch.no_grad():
-		y = model(x)
-		err = torch.mean((y - x) ** 2, dim=1).item()
-	return float(err)
+    x = torch.from_numpy(win).unsqueeze(0)
+    with torch.no_grad():
+        y = model(x)
+        err = torch.mean((y - x) ** 2, dim=1).item()
+    return float(err)
 
 
 # ----------------------------
@@ -202,7 +209,6 @@ def main():
     model.eval()
     model_name = os.path.basename(MODEL_PATH)
 
-    # Only infer for tags that exist in metadata (trained tags)
     tags = [t for t in fetch_distinct_tags() if t in meta_by_tag]
     tags = tags[:MAX_TAGS_PER_CYCLE]
 
@@ -216,7 +222,6 @@ def main():
     for tag_id in tags:
         last_idx = state.get(tag_id, 0)
 
-        # If never processed before, start near the end (backfill a bit)
         if last_idx <= 0:
             mx = get_max_idx_for_tag(tag_id)
             last_idx = max(0, mx - BACKFILL_ROWS)
@@ -252,7 +257,6 @@ def main():
                 rt.window_time.append(ts)
                 rt.last_idx = int(idx)
 
-                # only score once we have a full window
                 if len(rt.window) < window_size:
                     continue
 
@@ -264,8 +268,8 @@ def main():
                 score_rows.append((
                     sensor_type,
                     tag_id,
-                    rt.last_idx,        # window_end_idx
-                    rt.window_time[-1], # window_end_time (datetime)
+                    rt.last_idx,
+                    rt.window_time[-1],
                     score,
                     meta.threshold,
                     is_anom,

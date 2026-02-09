@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#!/usr/bin/env python3
 import json
 import os
 import time
@@ -24,25 +24,24 @@ DB_CONFIG = {
 }
 
 SOURCE_TABLE = "raw_temp_record"
-STATE_TABLE  = "edge_infer_state"
-SCORE_TABLE  = "edge_temp_health_score"
+STATE_TABLE = "edge_infer_state"
+SCORE_TABLE = "edge_temp_health_score"
 
-TAG_COL  = "tag_id"
-IDX_COL  = "idx"
-VAL_COL  = "value"
+TAG_COL = "tag_id"
+IDX_COL = "idx"
+VAL_COL = "value"
 TIME_COL = "created_on"
 
 SENSOR_TYPE = "temperature_health"
 
 MODEL_PATH = "/opt/edge/models/temp_health/model_temp_health.joblib"
-META_PATH  = "/opt/edge/models/temp_health/temp_health_metadata.json"
+META_PATH = "/opt/edge/models/temp_health/temp_health_metadata.json"
 
 POLL_SECONDS = 2.0
 FETCH_LIMIT = 2000
 MAX_TAGS_PER_CYCLE = 500
 BACKFILL_ROWS = 5000
 
-# Default alert threshold (can be overridden by metadata if you want)
 DEFAULT_HEALTH_THRESHOLD = 70.0
 
 
@@ -53,6 +52,7 @@ DEFAULT_HEALTH_THRESHOLD = 70.0
 class TagBaseline:
     mean: float
     std: float
+
 
 @dataclass
 class TagRuntime:
@@ -67,6 +67,7 @@ class TagRuntime:
 def db_connect():
     return psycopg2.connect(**DB_CONFIG)
 
+
 def fetch_distinct_tags() -> List[str]:
     q = f"SELECT DISTINCT {TAG_COL} FROM {SOURCE_TABLE}"
     with db_connect() as conn:
@@ -74,6 +75,7 @@ def fetch_distinct_tags() -> List[str]:
             cur.execute(q)
             rows = cur.fetchall()
     return [str(r[0]) for r in rows if r and r[0] is not None]
+
 
 def load_state(sensor_type: str, tags: List[str]) -> Dict[str, int]:
     out = {t: 0 for t in tags}
@@ -93,6 +95,7 @@ def load_state(sensor_type: str, tags: List[str]) -> Dict[str, int]:
                 out[str(tag_id)] = int(last_idx)
     return out
 
+
 def upsert_state(sensor_type: str, rows: List[Tuple[str, int]]) -> None:
     if not rows:
         return
@@ -110,6 +113,7 @@ def upsert_state(sensor_type: str, rows: List[Tuple[str, int]]) -> None:
             psycopg2.extras.execute_values(cur, q, values, page_size=500)
         conn.commit()
 
+
 def insert_scores(rows: List[Tuple]) -> None:
     if not rows:
         return
@@ -126,6 +130,7 @@ def insert_scores(rows: List[Tuple]) -> None:
             psycopg2.extras.execute_values(cur, q, rows, page_size=500)
         conn.commit()
 
+
 def get_max_idx_for_tag(tag_id: str) -> int:
     q = f"SELECT COALESCE(MAX({IDX_COL}), 0) FROM {SOURCE_TABLE} WHERE {TAG_COL} = %s;"
     with db_connect() as conn:
@@ -133,6 +138,7 @@ def get_max_idx_for_tag(tag_id: str) -> int:
             cur.execute(q, (tag_id,))
             (mx,) = cur.fetchone()
     return int(mx or 0)
+
 
 def fetch_rows_since(tag_id: str, last_idx: int, limit: int):
     q = f"""
@@ -167,6 +173,7 @@ def _slope(y: np.ndarray) -> float:
         return 0.0
     return float(np.sum(t * yy) / denom)
 
+
 def window_features(x: np.ndarray) -> np.ndarray:
     mu = float(np.mean(x))
     sd = float(np.std(x))
@@ -191,20 +198,19 @@ def window_features(x: np.ndarray) -> np.ndarray:
         dtype=np.float32,
     )
 
+
 def normalize_features_per_tag(F: np.ndarray, baseline: TagBaseline) -> np.ndarray:
     G = F.copy()
 
     s = baseline.std if baseline.std != 0 else 1.0
 
-    # magnitude-ish
-    G[0] = (G[0] - baseline.mean) / s  # mean
-    G[2] = (G[2] - baseline.mean) / s  # min
-    G[3] = (G[3] - baseline.mean) / s  # max
-    G[4] = G[4] / s                    # p2p
+    G[0] = (G[0] - baseline.mean) / s
+    G[2] = (G[2] - baseline.mean) / s
+    G[3] = (G[3] - baseline.mean) / s
+    G[4] = G[4] / s
 
-    # rate-ish
-    G[5] = G[5] / s                    # mean_abs_delta
-    G[6] = G[6] / s                    # slope_per_sample
+    G[5] = G[5] / s
+    G[6] = G[6] / s
 
     return G.astype(np.float32)
 
@@ -214,13 +220,10 @@ def normalize_features_per_tag(F: np.ndarray, baseline: TagBaseline) -> np.ndarr
 # ----------------------------
 def raw_to_health(raw_score: float, lo: float, hi: float) -> float:
     if hi <= lo:
-        # fallback: if mapping is broken, treat everything as "neutral"
         return 50.0
 
-    # clamp
     r = min(max(raw_score, lo), hi)
-    # invert
-    t = (r - lo) / (hi - lo)      # 0..1 where 0 is "bad" (low raw)
+    t = (r - lo) / (hi - lo)
     health = (1.0 - t) * 100.0
     return float(health)
 
@@ -241,8 +244,7 @@ def load_metadata(path: str) -> Tuple[Dict[str, TagBaseline], float, float, floa
     hi = float(mapping.get("raw_score_hi"))
 
     window_size = int(meta.get("window_size", 120))
-    stride = int(meta.get("stride", 10))  # used for when to emit scores
-    # Optional override:
+    stride = int(meta.get("stride", 10))
     health_threshold = float(meta.get("health_threshold", DEFAULT_HEALTH_THRESHOLD))
 
     return per_tag, lo, hi, health_threshold, window_size, stride
@@ -317,25 +319,21 @@ def main():
                 rt.window_time.append(ts)
                 rt.last_idx = int(idx)
 
-                # wait for full window
                 if len(rt.window) < window_size:
                     continue
 
-                # Only emit every 'stride' samples (reduce DB spam)
-                # (Emit when window_end_idx is aligned)
                 if (rt.last_idx % stride) != 0:
                     continue
 
                 raw = np.array(rt.window, dtype=np.float32)
 
-                # Safety check: window must be finite
                 if not np.isfinite(raw).all():
                     continue
 
-                F = window_features(raw)                     # (9,)
-                Fn = normalize_features_per_tag(F, baseline)  # (9,)
+                F = window_features(raw)
+                Fn = normalize_features_per_tag(F, baseline)
 
-                Xs = scaler.transform(Fn.reshape(1, -1))      # (1,9)
+                Xs = scaler.transform(Fn.reshape(1, -1))
                 raw_score = float(model.score_samples(Xs)[0])
 
                 health = raw_to_health(raw_score, raw_lo, raw_hi)

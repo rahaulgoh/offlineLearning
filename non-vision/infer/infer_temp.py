@@ -12,10 +12,9 @@ import psycopg2.extras
 import torch
 
 
-# ---------
+# ----------------------------
 # CONFIG
-#----------
-
+# ----------------------------
 DB_CONFIG = {
     "dbname": "postgres",
     "user": "postgres",
@@ -42,11 +41,9 @@ MAX_TAGS_PER_CYCLE = 500
 TORCH_THREADS = 1
 BACKFILL_ROWS = 5000
 
-# Your gateway cadence:
-EXPECTED_PERIOD_SECONDS = 30.0   # expected spacing between samples
-WINDOW_SPAN_FACTOR = 2.0        # allow up to 2× expected span before declaring window "too sparse"
+EXPECTED_PERIOD_SECONDS = 30.0
+WINDOW_SPAN_FACTOR = 2.0
 
-# Numeric safety
 MIN_STD = 1e-6
 
 
@@ -103,9 +100,6 @@ def load_state(sensor_type: str, tags: List[str]) -> Dict[str, int]:
 
 
 def upsert_state(sensor_type: str, rows: List[Tuple[str, int]]) -> None:
-    """
-    rows: [(tag_id, last_idx), ...]
-    """
     if not rows:
         return
 
@@ -150,13 +144,12 @@ def get_max_idx_for_tag(tag_id: str) -> int:
 
 
 def fetch_rows_since(tag_id: str, last_idx: int, limit: int):
-    # Filter NaN and +/-Infinity at SQL level too.
     q = f"""
         SELECT {IDX_COL}, {VAL_COL}, {TIME_COL}
         FROM {SOURCE_TABLE}
         WHERE {TAG_COL} = %s
         AND {IDX_COL} > %s
-        AND {VAL_COL} = {VAL_COL}                  
+        AND {VAL_COL} = {VAL_COL}
         AND {VAL_COL} <> 'Infinity'::float8
         AND {VAL_COL} <> '-Infinity'::float8
         ORDER BY {IDX_COL} ASC
@@ -191,7 +184,6 @@ def load_metadata(path: str):
 
 
 def zscore_clip(arr: np.ndarray, mean: float, std: float, clip: float) -> np.ndarray:
-    # Guard mean/std
     if not np.isfinite(mean) or not np.isfinite(std):
         return np.full_like(arr, np.nan, dtype=np.float32)
 
@@ -201,7 +193,6 @@ def zscore_clip(arr: np.ndarray, mean: float, std: float, clip: float) -> np.nda
 
     z = (arr - mean) / s
 
-    # If z is poisoned, return it (caller will skip)
     if not np.all(np.isfinite(z)):
         return z.astype(np.float32)
 
@@ -213,7 +204,7 @@ def recon_mse(model, win: np.ndarray) -> float:
     if not np.all(np.isfinite(win)):
         return float("nan")
 
-    x = torch.from_numpy(win).unsqueeze(0)  # (1, W)
+    x = torch.from_numpy(win).unsqueeze(0)
 
     with torch.no_grad():
         y = model(x)
@@ -244,7 +235,6 @@ def main():
     model.eval()
     model_name = os.path.basename(MODEL_PATH)
 
-    # Only infer for tags that exist in metadata
     tags = [t for t in fetch_distinct_tags() if t in meta_by_tag]
     tags = tags[:MAX_TAGS_PER_CYCLE]
 
@@ -258,7 +248,6 @@ def main():
     for tag_id in tags:
         last_idx = state.get(tag_id, 0)
 
-        # If never processed before, start near end (backfill)
         if last_idx <= 0:
             mx = get_max_idx_for_tag(tag_id)
             last_idx = max(0, mx - BACKFILL_ROWS)
@@ -297,7 +286,6 @@ def main():
                 if val is None:
                     continue
 
-                # Robust float conversion + finite check
                 try:
                     fval = float(val)
                 except (TypeError, ValueError):
@@ -309,11 +297,9 @@ def main():
                 rt.window_time.append(ts)
                 rt.last_idx = int(idx)
 
-                # Only score once we have a full window
                 if len(rt.window) < window_size:
                     continue
 
-                # TIME-SPAN GUARD: skip sparse/dropout windows
                 try:
                     span = (rt.window_time[-1] - rt.window_time[0]).total_seconds()
                 except Exception:
@@ -322,22 +308,18 @@ def main():
                 if span > max_span:
                     continue
 
-                # FINITE GUARD: raw window
                 raw = np.array(rt.window, dtype=np.float32)
                 if not np.all(np.isfinite(raw)):
                     continue
 
-                # z-score + clip
                 win = zscore_clip(raw, meta.mean, meta.std, zclip)
                 if not np.all(np.isfinite(win)):
                     continue
 
-                # model score
                 score = recon_mse(model, win)
                 if not np.isfinite(score):
                     continue
 
-                # threshold must be finite
                 if not np.isfinite(meta.threshold):
                     continue
 
@@ -346,8 +328,8 @@ def main():
                 score_rows.append((
                     sensor_type,
                     tag_id,
-                    rt.last_idx,        # window_end_idx
-                    rt.window_time[-1], # window_end_time
+                    rt.last_idx,
+                    rt.window_time[-1],
                     score,
                     meta.threshold,
                     is_anom,
