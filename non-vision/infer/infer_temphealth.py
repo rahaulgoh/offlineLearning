@@ -86,7 +86,7 @@ def load_state(sensor_type: str, tags: List[str]) -> Dict[str, int]:
         SELECT tag_id, last_idx
         FROM {STATE_TABLE}
         WHERE sensor_type = %s
-          AND tag_id = ANY(%s);
+        AND tag_id = ANY(%s);
     """
     with db_connect() as conn:
         with conn.cursor() as cur:
